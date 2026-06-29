@@ -12,9 +12,9 @@ export default function App() {
   return (
     <>
       <StatusBar
-        barStyle="dark-content"
-        backgroundColor={'#f0f0f0'}
+        barStyle="light-content"
         translucent={false}
+        backgroundColor={'#fff'}
       />
       <SafeAreaProvider style={{ flex: 1 }}>
         <NavigationContainer>

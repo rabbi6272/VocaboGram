@@ -1,23 +1,28 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
   Image,
-  Platform,
   Pressable,
   StatusBar,
   StyleSheet,
   Text,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import Video, { OnLoadData, OnProgressData } from 'react-native-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  Heart,
+  MessageCircle,
+  Share2,
+  Volume2,
+  VolumeX,
+  Music2,
+} from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 
 import { Post } from '../types/Post';
-
-import { Heart, MessageCircle, PauseCircle, Share2 } from 'lucide-react-native';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -32,32 +37,15 @@ const Colors = {
   black50: 'rgba(0,0,0,0.50)',
   black20: 'rgba(0,0,0,0.20)',
   indigo: '#6366F1',
-  indigoDark: '#4F46E5',
   likeRed: '#FF3B5C',
   progressBg: 'rgba(255,255,255,0.30)',
   progressFill: '#FFFFFF',
 };
 
-const Spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-};
+const Spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 };
 
-interface ReelCardProps {
-  reel: Post;
-  isActive: boolean;
-  onLike?: (id: string) => void;
-  onComment?: (id: string) => void;
-  onShare?: (id: string) => void;
-  onFollow?: (id: string) => void;
-  onUserPress?: (username: string) => void;
-}
-
-function formatCount(n: number | undefined): string {
-  if (n === undefined) return '0';
+function formatCount(n: number | null | undefined): string {
+  if (n == null) return '0';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
@@ -69,24 +57,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function useDoubleTap(onDoubleTap: () => void, delay = 300) {
-  const lastTap = useRef<number>(0);
-  return useCallback(() => {
-    const now = Date.now();
-    if (now - lastTap.current < delay) {
-      onDoubleTap();
-    }
-    lastTap.current = now;
-  }, [onDoubleTap, delay]);
-}
-
-interface ProgressBarProps {
-  progress: number; // 0–1
-  duration: number; // seconds
-  currentTime: number;
-}
-
-function ProgressBar({ progress, duration, currentTime }: ProgressBarProps) {
+function ProgressBar({ progress }: { progress: number }) {
   const widthAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -111,7 +82,6 @@ function ProgressBar({ progress, duration, currentTime }: ProgressBarProps) {
             },
           ]}
         />
-        {/* Scrubber knob */}
         <Animated.View
           style={[
             styles.progressKnob,
@@ -124,10 +94,6 @@ function ProgressBar({ progress, duration, currentTime }: ProgressBarProps) {
           ]}
         />
       </View>
-      {/* <View style={styles.progressTimes}>
-        <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-        <Text style={styles.timeText}>{formatTime(duration)}</Text>
-      </View> */}
     </View>
   );
 }
@@ -166,304 +132,333 @@ function HeartBurst({ visible }: { visible: boolean }) {
       style={[styles.heartBurst, { opacity, transform: [{ scale }] }]}
       pointerEvents="none"
     >
-      <Heart size={96} color={Colors.likeRed} />
+      <Heart size={96} color={Colors.likeRed} fill={Colors.likeRed} />
     </Animated.View>
   );
 }
 
-export function ReelCard({
-  reel,
-  isActive,
-  onLike,
-  onComment,
-  onShare,
-  onFollow,
-  onUserPress,
-}: ReelCardProps) {
-  const insets = useSafeAreaInsets();
+function PauseIndicator({ paused }: { paused: boolean }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.7)).current;
+  const hideTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // Playback state
-  const [paused, setPaused] = useState(!isActive);
-  const [muted, setMuted] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [buffering, setBuffering] = useState(false);
-  const [videoReady, setVideoReady] = useState(false);
-
-  // Like state
-  const [liked, setLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(reel.likesCount);
-  const [showHeart, setShowHeart] = useState(false);
-  const heartTimeout = useRef<ReturnType<typeof setTimeout>>();
-
-  // Pause overlay
-  const pauseOpacity = useRef(new Animated.Value(0)).current;
-
-  // Sync isActive → paused
   useEffect(() => {
-    setPaused(!isActive);
-    if (!isActive) {
-      setCurrentTime(0);
-    }
-  }, [isActive]);
-
-  // Pause/resume feedback overlay
-  useEffect(() => {
+    // Only flash the indicator when user explicitly pauses
     if (paused) {
-      Animated.timing(pauseOpacity, {
+      clearTimeout(hideTimer.current);
+      opacity.setValue(1);
+      scale.setValue(0.7);
+      Animated.spring(scale, {
         toValue: 1,
-        duration: 180,
         useNativeDriver: true,
+        damping: 12,
+        stiffness: 200,
       }).start();
+      // Auto-hide after 800ms
+      hideTimer.current = setTimeout(() => {
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }, 800);
     } else {
-      Animated.timing(pauseOpacity, {
+      clearTimeout(hideTimer.current);
+      Animated.timing(opacity, {
         toValue: 0,
-        duration: 250,
+        duration: 200,
         useNativeDriver: true,
       }).start();
     }
+    return () => clearTimeout(hideTimer.current);
   }, [paused]);
 
-  const handleLoad = useCallback((data: OnLoadData) => {
-    setDuration(data.duration);
-    setVideoReady(true);
-  }, []);
-
-  const handleProgress = useCallback((data: OnProgressData) => {
-    setCurrentTime(data.currentTime);
-  }, []);
-
-  const handleEnd = useCallback(() => {
-    // Loop: seeking back to 0 is handled by `repeat` prop on Video
-  }, []);
-
-  const togglePlay = useCallback(() => {
-    setPaused(p => !p);
-  }, []);
-
-  const toggleMute = useCallback(() => {
-    setMuted(m => !m);
-  }, []);
-
-  const triggerLike = useCallback(() => {
-    setLiked(prev => {
-      setLikesCount(c => (prev ? c - 1 : c + 1));
-      return !prev;
-    });
-    onLike?.(reel.id);
-  }, [reel.id, onLike]);
-
-  const triggerDoubleTapLike = useCallback(() => {
-    if (!liked) {
-      setLiked(true);
-      setLikesCount(c => c + 1);
-      onLike?.(reel.id);
-    }
-    clearTimeout(heartTimeout.current);
-    setShowHeart(true);
-    heartTimeout.current = setTimeout(() => setShowHeart(false), 900);
-  }, [liked, reel.id, onLike]);
-
-  const handleDoubleTap = useDoubleTap(triggerDoubleTapLike);
-
-  const progress = duration > 0 ? currentTime / duration : 0;
-
   return (
-    <View style={styles.container}>
-      <StatusBar
-        translucent
-        backgroundColor="transparent"
-        barStyle="light-content"
-      />
-
-      {/* ── Video ── */}
-      <TouchableWithoutFeedback
-        onPress={() => {
-          handleDoubleTap();
-          togglePlay();
-        }}
-      >
-        <View style={StyleSheet.absoluteFill}>
-          {reel.media[0].thumbnailUrl && !videoReady && (
-            <Image
-              source={{ uri: reel.media[0].thumbnailUrl }}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-            />
-          )}
-          <Video
-            source={{ uri: reel.media[0].url }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-            paused={paused}
-            muted={muted}
-            repeat
-            onLoad={handleLoad}
-            onProgress={handleProgress}
-            onEnd={handleEnd}
-            onBuffer={({ isBuffering }) => setBuffering(isBuffering)}
-            ignoreSilentSwitch="ignore"
-            playInBackground={false}
-            playWhenInactive={false}
-          />
+    <Animated.View
+      style={[styles.pauseOverlay, { opacity }]}
+      pointerEvents="none"
+    >
+      <View style={styles.pauseIconBg}>
+        {/* Two vertical bars = pause icon, no extra library needed */}
+        <View style={styles.pauseBars}>
+          <View style={styles.pauseBar} />
+          <View style={styles.pauseBar} />
         </View>
-      </TouchableWithoutFeedback>
+      </View>
+    </Animated.View>
+  );
+}
 
-      {/* ── Pause overlay icon ── */}
-      <Animated.View
-        style={[styles.pauseOverlay, { opacity: pauseOpacity }]}
-        pointerEvents="none"
-      >
-        <View style={styles.pauseIconBg}>
-          <PauseCircle size={48} color={Colors.white} />
-        </View>
-      </Animated.View>
+interface ReelCardProps {
+  reel: Post;
+  isActive: boolean;
+  onLike?: (id: string) => void;
+  onComment?: (id: string) => void;
+  onShare?: (id: string) => void;
+  onFollow?: (id: string) => void;
+  onUserPress?: (username: string) => void;
+}
+export const ReelCard: React.FC<ReelCardProps> = memo(
+  ({ reel, isActive, onLike, onComment, onShare, onUserPress }) => {
+    const insets = useSafeAreaInsets();
 
-      {/* ── Buffering spinner ── */}
-      {buffering && !paused && (
-        <View style={styles.bufferOverlay} pointerEvents="none">
-          <ActivityIndicator size={'large'} color={Colors.white} />
-        </View>
-      )}
+    //  Playback
+    const [paused, setPaused] = useState(false);
+    const [muted, setMuted] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [buffering, setBuffering] = useState(false);
 
-      {/* ── Double-tap heart burst ── */}
-      <HeartBurst visible={showHeart} />
+    //  Like
+    const [liked, setLiked] = useState(false);
+    const [likesCount, setLikesCount] = useState(reel.likesCount ?? 0);
+    const [showHeart, setShowHeart] = useState(false);
+    const heartTimeout = useRef<ReturnType<typeof setTimeout>>();
 
-      {/* ── Right action rail ── */}
-      <View
-        style={[
-          styles.actionRail,
-          { paddingBottom: insets.bottom + Spacing.xl },
-        ]}
-      >
-        {/* Like */}
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <Heart
-            size={28}
-            color={liked ? Colors.likeRed : Colors.white}
+    //  Tap handling
+    const lastTap = useRef<number>(0);
+    const singleTapTimer = useRef<ReturnType<typeof setTimeout>>();
+
+    const navigator = useNavigation();
+    navigator.addListener('blur', () => {
+      setPaused(true);
+    });
+    navigator.addListener('focus', () => {
+      if (isActive) {
+        setPaused(false);
+      }
+    });
+
+    //  Sync isActive → paused
+    useEffect(() => {
+      if (isActive) {
+        setPaused(false);
+      } else {
+        setPaused(true);
+        setCurrentTime(0);
+      }
+    }, [isActive]);
+
+    //  Video callbacks
+    const handleLoad = useCallback((data: OnLoadData) => {
+      setDuration(data.duration);
+    }, []);
+
+    const handleProgress = useCallback((data: OnProgressData) => {
+      setCurrentTime(data.currentTime);
+    }, []);
+
+    //  Like
+    const triggerLike = useCallback(() => {
+      setLiked(prev => {
+        setLikesCount(c => (prev ? c - 1 : c + 1));
+        return !prev;
+      });
+      onLike?.(reel.id);
+    }, [reel.id, onLike]);
+
+    const triggerDoubleTapLike = useCallback(() => {
+      if (!liked) {
+        setLiked(true);
+        setLikesCount(c => c + 1);
+        onLike?.(reel.id);
+      }
+      clearTimeout(heartTimeout.current);
+      setShowHeart(true);
+      heartTimeout.current = setTimeout(() => setShowHeart(false), 900);
+    }, [liked, reel.id, onLike]);
+
+    //  Tap: single = pause/resume, double = like
+    const handleTap = useCallback(() => {
+      const now = Date.now();
+      const DOUBLE_TAP_DELAY = 280;
+
+      if (now - lastTap.current < DOUBLE_TAP_DELAY) {
+        // Double tap detected — cancel pending single-tap
+        clearTimeout(singleTapTimer.current);
+        triggerDoubleTapLike();
+      } else {
+        // Wait to see if a second tap follows
+        singleTapTimer.current = setTimeout(() => {
+          setPaused(p => !p);
+        }, DOUBLE_TAP_DELAY);
+      }
+      lastTap.current = now;
+    }, [triggerDoubleTapLike]);
+
+    const progress = duration > 0 ? currentTime / duration : 0;
+
+    return (
+      <View style={styles.container}>
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle="light-content"
+        />
+
+        <Video
+          source={{ uri: reel.media[0].url }}
+          poster={{
+            source: { uri: reel.media[0].thumbnailUrl },
+            resizeMode: 'contain',
+          }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="contain"
+          paused={paused}
+          muted={muted}
+          repeat={false}
+          controls={false}
+          onLoad={handleLoad}
+          onProgress={handleProgress}
+          onBuffer={({ isBuffering }) => setBuffering(isBuffering)}
+          ignoreSilentSwitch="ignore"
+          playInBackground={false}
+          playWhenInactive={false}
+        />
+
+        {/*  Tap overlay (sits above video, below action rail)  */}
+        <Pressable
+          onPress={handleTap}
+          style={styles.tapOverlay}
+          accessible={false}
+        />
+
+        {/*  Pause flash indicator  */}
+        <PauseIndicator paused={paused} />
+
+        {/*  Buffering spinner  */}
+        {buffering && !paused && (
+          <View style={styles.bufferOverlay} pointerEvents="none">
+            <ActivityIndicator size="large" color={Colors.white} />
+          </View>
+        )}
+
+        {/*  Double-tap heart burst  */}
+        <HeartBurst visible={showHeart} />
+
+        {/*  Right action rail  */}
+        <View
+          style={[
+            styles.actionRail,
+            { paddingBottom: insets.bottom + Spacing.xl },
+          ]}
+        >
+          {/* Like */}
+          <Pressable
             onPress={triggerLike}
+            hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel={`${
               liked ? 'Unlike' : 'Like'
             } reel, ${formatCount(likesCount)} likes`}
-          />
-          <Text style={styles.actionLabel}>{formatCount(likesCount)}</Text>
-        </View>
+            style={styles.actionButton}
+          >
+            <Heart
+              size={28}
+              color={liked ? Colors.likeRed : Colors.white}
+              fill={liked ? Colors.likeRed : 'transparent'}
+            />
+            <Text style={styles.actionLabel}>{formatCount(likesCount)}</Text>
+          </Pressable>
 
-        {/* Comment */}
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <MessageCircle
-            size={28}
-            color={Colors.white}
+          {/* Comment */}
+          <Pressable
             onPress={() => onComment?.(reel.id)}
+            hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel={`Comment on reel, ${formatCount(
-              reel.commentsCount,
-            )} comments`}
-          />
-          <Text style={styles.actionLabel}>
-            {formatCount(reel.commentsCount)}
-          </Text>
-        </View>
+            accessibilityLabel={`${formatCount(reel.commentsCount)} comments`}
+            style={styles.actionButton}
+          >
+            <MessageCircle size={28} color={Colors.white} />
+            <Text style={styles.actionLabel}>
+              {formatCount(reel.commentsCount)}
+            </Text>
+          </Pressable>
 
-        {/* Share */}
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <Share2
-            size={28}
-            color={Colors.white}
+          {/* Share */}
+          <Pressable
             onPress={() => onShare?.(reel.id)}
+            hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel={`Share reel, ${formatCount(
               reel.sharesCount,
             )} shares`}
-          />
-          <Text style={styles.actionLabel}>
-            {formatCount(reel.sharesCount)}
-          </Text>
+            style={styles.actionButton}
+          >
+            <Share2 size={28} color={Colors.white} />
+            <Text style={styles.actionLabel}>
+              {formatCount(reel.sharesCount)}
+            </Text>
+          </Pressable>
+
+          {/* Mute */}
+          <Pressable
+            onPress={() => setMuted(m => !m)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={muted ? 'Unmute video' : 'Mute video'}
+            style={styles.actionButton}
+          >
+            {muted ? (
+              <VolumeX size={26} color={Colors.white} />
+            ) : (
+              <Volume2 size={26} color={Colors.white} />
+            )}
+          </Pressable>
         </View>
 
-        {/* Mute */}
-
-        {/* More */}
-
-        {/* Rotating audio disc */}
-        <View style={styles.audioDisc}>
-          <View style={styles.audioDiscInner}>
-            <Text style={{ color: Colors.white, fontSize: 16 }}>🎵</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ── Bottom info + progress ── */}
-      <View
-        style={[
-          styles.bottomInfo,
-          { paddingBottom: insets.bottom + Spacing.md },
-        ]}
-      >
-        {/* Username row */}
-        <Pressable
-          onPress={() => onUserPress?.(reel.username)}
-          accessibilityRole="button"
-          accessibilityLabel={`View ${reel.username}'s profile`}
-          style={styles.userRow}
+        {/*  Bottom info + progress  */}
+        <View
+          style={[
+            styles.bottomInfo,
+            { paddingBottom: insets.bottom + Spacing.md },
+          ]}
         >
-          {reel.userAvatar ? (
-            <Image source={{ uri: reel.userAvatar }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarFallbackText}>
-                {reel.username.charAt(0).toUpperCase()}
+          {/* Username row */}
+          <Pressable
+            onPress={() => onUserPress?.(reel.username)}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${reel.username}'s profile`}
+            style={styles.userRow}
+          >
+            {reel.userAvatar ? (
+              <Image source={{ uri: reel.userAvatar }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={styles.avatarFallbackText}>
+                  {reel.username.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.username} numberOfLines={1}>
+              @{reel.username}
+            </Text>
+          </Pressable>
+
+          {/* Caption */}
+          {!!reel.caption && (
+            <Text style={styles.caption} numberOfLines={2}>
+              {reel.caption}
+            </Text>
+          )}
+
+          {/* Audio name */}
+          {reel.audio && (
+            <View style={styles.audioRow}>
+              <Music2 size={12} color={Colors.white80} />
+              <Text style={styles.audioText} numberOfLines={1}>
+                {reel.audio.title} · {reel.audio.artist}
               </Text>
             </View>
           )}
-          <Text style={styles.username} numberOfLines={1}>
-            {reel.username}
-          </Text>
 
-          {/* Follow pill */}
-          {/* <Pressable
-            onPress={() => {
-              setFollowing(f => !f);
-              onFollow?.(reel.id);
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={following ? 'Unfollow user' : 'Follow user'}
-            style={[styles.followPill, following && styles.followPillActive]}
-          >
-            <Text
-              style={[styles.followText, following && styles.followTextActive]}
-            >
-              {following ? 'Following' : 'Follow'}
-            </Text>
-          </Pressable> */}
-        </Pressable>
-
-        {/* Caption */}
-        <Text style={styles.caption} numberOfLines={2}>
-          {reel.caption}
-        </Text>
-
-        {/* Audio name */}
-        {reel.audio && (
-          <View style={styles.audioRow}>
-            <Text style={styles.audioText} numberOfLines={1}>
-              {reel.audio.title} - {reel.audio.artist}
-            </Text>
-          </View>
-        )}
-
-        {/* Progress bar */}
-        <ProgressBar
-          progress={progress}
-          duration={duration}
-          currentTime={currentTime}
-        />
+          {/* Progress bar */}
+          <ProgressBar progress={progress} />
+        </View>
       </View>
-    </View>
-  );
-}
+    );
+  },
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -473,29 +468,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  //   // Scrims
-  //   scrimBottom: {
-  //     ...StyleSheet.absoluteFill,
-  //     top: '40%',
-  //     backgroundColor: 'transparent',
-  //     // We overlay two semi-transparent views for the gradient effect:
-  //     borderTopColor: 'transparent',
-  //     // Use the two-view trick below:
-  //   },
-  //   scrimTop: {
-  //     position: 'absolute',
-  //     top: 0,
-  //     left: 0,
-  //     right: 0,
-  //     height: 120,
-  //     backgroundColor: Colors.black20,
-  //   },
+  // Tap overlay — sits above video, below action buttons
+  tapOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1,
+  },
 
-  // Pause overlay
+  // Pause indicator
   pauseOverlay: {
     ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
   pauseIconBg: {
     width: 72,
@@ -507,20 +491,25 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.white20,
   },
+  pauseBars: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pauseBar: {
+    width: 5,
+    height: 22,
+    borderRadius: 3,
+    backgroundColor: Colors.white,
+  },
 
-  // Buffer spinner (CSS-only shimmer via border trick)
+  // Buffer
   bufferOverlay: {
     ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  bufferSpinner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 3,
-    borderColor: Colors.white20,
-    borderTopColor: Colors.white,
+    zIndex: 5,
   },
 
   // Heart burst
@@ -528,6 +517,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 20,
   },
 
   // Right action rail
@@ -536,7 +526,8 @@ const styles = StyleSheet.create({
     right: Spacing.md,
     bottom: 50,
     alignItems: 'center',
-    gap: Spacing.lg,
+    gap: Spacing.md,
+    zIndex: 50,
   },
   actionButton: {
     alignItems: 'center',
@@ -548,31 +539,10 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 12,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: 3,
     textShadowColor: Colors.black50,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
-  },
-
-  // Rotating audio disc
-  audioDisc: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.white10,
-    borderWidth: 2,
-    borderColor: Colors.white20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: Spacing.xs,
-  },
-  audioDiscInner: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.black50,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 
   // Bottom info
@@ -584,7 +554,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.xl,
     gap: Spacing.sm,
-    backgroundColor: 'transparent',
+    zIndex: 50,
   },
 
   // User row
@@ -594,9 +564,9 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1.5,
     borderColor: Colors.white,
   },
@@ -607,7 +577,7 @@ const styles = StyleSheet.create({
   },
   avatarFallbackText: {
     color: Colors.white,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
   },
   username: {
@@ -618,30 +588,6 @@ const styles = StyleSheet.create({
     textShadowColor: Colors.black50,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
-  },
-
-  // Follow pill
-  followPill: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: Colors.white,
-    backgroundColor: Colors.white10,
-    minWidth: 44,
-    alignItems: 'center',
-  },
-  followPillActive: {
-    backgroundColor: Colors.white20,
-    borderColor: Colors.white60,
-  },
-  followText: {
-    color: Colors.white,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  followTextActive: {
-    color: Colors.white80,
   },
 
   // Caption
@@ -655,7 +601,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 6,
   },
 
-  // Audio
+  // Audio row
   audioRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -670,6 +616,7 @@ const styles = StyleSheet.create({
 
   // Progress bar
   progressContainer: {
+    width: '100%',
     gap: Spacing.xs,
     marginTop: Spacing.xs,
   },

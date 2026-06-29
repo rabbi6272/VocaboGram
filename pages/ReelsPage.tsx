@@ -34,7 +34,7 @@ export function ReelsPage() {
   ).current;
 
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 60,
+    itemVisiblePercentThreshold: 80,
   }).current;
 
   const getItemLayout = useCallback(
@@ -47,10 +47,10 @@ export function ReelsPage() {
   );
 
   const renderItem = useCallback(
-    ({ item, index }: { item: Post; index: number }) => (
+    ({ item }: { item: Post }) => (
       <ReelCard
         reel={item}
-        isActive={index === activeIndex}
+        isActive={item.id === reels[activeIndex]?.id}
         onLike={id => console.log('liked', id)}
         onComment={id => console.log('comment', id)}
         onShare={id => console.log('share', id)}
@@ -80,7 +80,7 @@ export function ReelsPage() {
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           removeClippedSubviews
-          maxToRenderPerBatch={2}
+          maxToRenderPerBatch={5}
           windowSize={3}
           initialNumToRender={1}
         />

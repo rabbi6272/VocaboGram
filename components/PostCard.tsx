@@ -11,6 +11,7 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 
+import { InfoIcon } from 'lucide-react-native';
 import Video from 'react-native-video';
 
 const INDIGO = {
@@ -147,11 +148,7 @@ export const PostCard: React.FC<Post & PostProps> = memo(
             accessibilityLabel="More options"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            {/* <Ionicons
-              name="ellipsis-horizontal"
-              size={20}
-              color={Colors.iconDefault}
-            /> */}
+            <InfoIcon size={20} color="white" />
           </TouchableOpacity>
         </View>
 
@@ -176,30 +173,16 @@ export const PostCard: React.FC<Post & PostProps> = memo(
               resizeMode="cover"
             />
           ) : (
-            <TouchableWithoutFeedback
-            // onPress={() => {
-            //   handleDoubleTap();
-            //   togglePlay();
-            // }}
-            >
-              <View style={StyleSheet.absoluteFill}>
-                <Video
-                  source={{ uri: media[0].url }}
-                  style={StyleSheet.absoluteFill}
-                  resizeMode="cover"
-                  // paused={paused}
-                  // muted={muted}
-                  // repeat
-                  // onLoad={handleLoad}
-                  // onProgress={handleProgress}
-                  // onEnd={handleEnd}
-                  // onBuffer={({ isBuffering }) => setBuffering(isBuffering)}
-                  ignoreSilentSwitch="ignore"
-                  playInBackground={false}
-                  playWhenInactive={false}
-                />
-              </View>
-            </TouchableWithoutFeedback>
+            <View style={StyleSheet.absoluteFill}>
+              <Video
+                source={{ uri: media[0].url }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+                ignoreSilentSwitch="ignore"
+                playInBackground={false}
+                playWhenInactive={false}
+              />
+            </View>
           )}
         </Pressable>
 
