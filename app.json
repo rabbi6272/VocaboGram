@@ -1,4 +1,11 @@
 {
   "name": "VocaboGram",
-  "displayName": "VocaboGram"
+  "icon": "./assets/images/app-icon.png",
+  "version": "1.0.0",
+  "orientation": "portrait",
+  "slug": "vocabogram",
+  "platforms": ["android"],
+  "updates": {
+    "fallbackToCacheTimeout": 0
+  }
 }
